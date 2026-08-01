@@ -1,9 +1,36 @@
 import { useState, useEffect } from 'react'
+import {
+  collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy,
+} from 'firebase/firestore'
+import { db } from './firebase'
 import CalendarGrid from './CalendarGrid'
 import EventSidebar from './EventSidebar'
 import AddEventModal from './AddEventModal'
 
-const STORAGE_KEY = 'calendar-events'
+const EVENTS_COL = 'events'
+
+// Shown only if Firestore config hasn't been filled in yet
+function ConfigBanner() {
+  return (
+    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-yellow-900/90 border border-yellow-600 text-yellow-200 text-xs px-4 py-2 rounded-lg shadow-lg max-w-md text-center">
+      Firebase not configured — events are saving locally only.{' '}
+      <span className="font-medium">Fill in your config in src/calendar/firebase.js</span>
+    </div>
+  )
+}
+
+const FIREBASE_CONFIGURED = !import.meta.env.VITE_FIREBASE_UNCONFIGURED
+
+function isConfigured() {
+  // If projectId is still the placeholder, Firestore won't work
+  try {
+    return db && db.app.options.projectId !== 'REPLACE_ME'
+  } catch {
+    return false
+  }
+}
+
+const STORAGE_KEY = 'calendar-events-local'
 
 const SAMPLE_EVENTS = [
   {
@@ -62,7 +89,7 @@ const SAMPLE_EVENTS = [
     date: '2026-08-20',
     startTime: '09:00',
     endTime: '09:45',
-    location: 'Manager\'s Office',
+    location: "Manager's Office",
     description: '',
     color: 'blue',
   },
@@ -89,7 +116,10 @@ const SAMPLE_EVENTS = [
 ]
 
 export default function CalendarApp() {
-  const [events, setEvents] = useState(() => {
+  const configured = isConfigured()
+
+  // Local fallback state (used when Firestore not configured)
+  const [localEvents, setLocalEvents] = useState(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
       return saved ? JSON.parse(saved) : SAMPLE_EVENTS
@@ -97,26 +127,73 @@ export default function CalendarApp() {
       return SAMPLE_EVENTS
     }
   })
+
+  // Firestore state
+  const [firestoreEvents, setFirestoreEvents] = useState(null) // null = loading
+  const [fsError, setFsError] = useState(null)
+
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingEvent, setEditingEvent] = useState(null)
   const [modalInitialDate, setModalInitialDate] = useState(null)
 
+  // Sync local events to localStorage
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
-  }, [events])
+    if (!configured) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(localEvents))
+    }
+  }, [localEvents, configured])
 
-  const addEvent = (eventData) => {
-    setEvents(prev => [...prev, { ...eventData, id: Date.now().toString() }])
+  // Subscribe to Firestore in real time
+  useEffect(() => {
+    if (!configured) return
+    const q = query(collection(db, EVENTS_COL), orderBy('date'))
+    const unsub = onSnapshot(
+      q,
+      snap => {
+        setFirestoreEvents(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+        setFsError(null)
+      },
+      err => {
+        console.error('Firestore error:', err)
+        setFsError(err.message)
+      },
+    )
+    return () => unsub()
+  }, [configured])
+
+  const events = configured
+    ? (firestoreEvents ?? [])
+    : localEvents
+
+  const loading = configured && firestoreEvents === null && !fsError
+
+  // --- CRUD ---
+
+  const addEvent = async eventData => {
+    if (configured) {
+      await addDoc(collection(db, EVENTS_COL), eventData)
+    } else {
+      setLocalEvents(prev => [...prev, { ...eventData, id: Date.now().toString() }])
+    }
   }
 
-  const updateEvent = (updatedEvent) => {
-    setEvents(prev => prev.map(e => e.id === updatedEvent.id ? updatedEvent : e))
+  const updateEvent = async updatedEvent => {
+    if (configured) {
+      const { id, ...data } = updatedEvent
+      await updateDoc(doc(db, EVENTS_COL, id), data)
+    } else {
+      setLocalEvents(prev => prev.map(e => e.id === updatedEvent.id ? updatedEvent : e))
+    }
   }
 
-  const deleteEvent = (id) => {
-    setEvents(prev => prev.filter(e => e.id !== id))
+  const deleteEvent = async id => {
+    if (configured) {
+      await deleteDoc(doc(db, EVENTS_COL, id))
+    } else {
+      setLocalEvents(prev => prev.filter(e => e.id !== id))
+    }
   }
 
   const openAddModal = (date = null) => {
@@ -125,22 +202,17 @@ export default function CalendarApp() {
     setIsModalOpen(true)
   }
 
-  const openEditModal = (event) => {
+  const openEditModal = event => {
     setEditingEvent(event)
     setIsModalOpen(true)
   }
 
-  const handleSave = (eventData) => {
+  const handleSave = async eventData => {
     if (editingEvent) {
-      updateEvent({ ...eventData, id: editingEvent.id })
+      await updateEvent({ ...eventData, id: editingEvent.id })
     } else {
-      addEvent(eventData)
+      await addEvent(eventData)
     }
-    setIsModalOpen(false)
-    setEditingEvent(null)
-  }
-
-  const handleCloseModal = () => {
     setIsModalOpen(false)
     setEditingEvent(null)
   }
@@ -159,6 +231,16 @@ export default function CalendarApp() {
             </svg>
           </div>
           <h1 className="text-lg font-bold text-white tracking-tight">Calendar</h1>
+          {configured && (
+            <span className="text-xs text-green-400 border border-green-800 bg-green-950/50 px-2 py-0.5 rounded-full">
+              ● Cloud sync
+            </span>
+          )}
+          {!configured && (
+            <span className="text-xs text-gray-500 border border-gray-700 px-2 py-0.5 rounded-full">
+              Local only
+            </span>
+          )}
         </div>
         <button
           onClick={() => openAddModal()}
@@ -169,41 +251,55 @@ export default function CalendarApp() {
         </button>
       </header>
 
-      {/* Main layout */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Calendar area */}
-        <div className="flex-1 p-5 overflow-auto min-w-0">
-          <CalendarGrid
-            currentDate={currentDate}
-            events={events}
-            selectedDate={selectedDate}
-            onDayClick={setSelectedDate}
-            onMonthChange={setCurrentDate}
-            onAddEvent={openAddModal}
-          />
+      {/* Firestore error banner */}
+      {fsError && (
+        <div className="bg-red-900/40 border-b border-red-800 text-red-300 text-xs px-6 py-2 text-center">
+          Firestore error: {fsError}
         </div>
+      )}
 
-        {/* Sidebar */}
-        <div className="w-80 flex-shrink-0 border-l border-gray-800 flex flex-col overflow-hidden">
-          <EventSidebar
-            events={events}
-            selectedDate={selectedDate}
-            onAddEvent={openAddModal}
-            onDeleteEvent={deleteEvent}
-            onEditEvent={openEditModal}
-            onClearSelection={() => setSelectedDate(null)}
-          />
+      {/* Loading */}
+      {loading ? (
+        <div className="flex-1 flex items-center justify-center text-gray-500">
+          <div className="text-center">
+            <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            Loading events…
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="flex flex-1 overflow-hidden">
+          <div className="flex-1 p-5 overflow-auto min-w-0">
+            <CalendarGrid
+              currentDate={currentDate}
+              events={events}
+              selectedDate={selectedDate}
+              onDayClick={setSelectedDate}
+              onMonthChange={setCurrentDate}
+              onAddEvent={openAddModal}
+            />
+          </div>
+          <div className="w-80 flex-shrink-0 border-l border-gray-800 flex flex-col overflow-hidden">
+            <EventSidebar
+              events={events}
+              selectedDate={selectedDate}
+              onAddEvent={openAddModal}
+              onDeleteEvent={deleteEvent}
+              onEditEvent={openEditModal}
+              onClearSelection={() => setSelectedDate(null)}
+            />
+          </div>
+        </div>
+      )}
 
-      {/* Modal */}
       <AddEventModal
         isOpen={isModalOpen}
-        onClose={handleCloseModal}
+        onClose={() => { setIsModalOpen(false); setEditingEvent(null) }}
         onSave={handleSave}
         initialDate={modalInitialDate}
         editEvent={editingEvent}
       />
+
+      {!configured && <ConfigBanner />}
     </div>
   )
 }

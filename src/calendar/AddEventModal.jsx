@@ -43,20 +43,29 @@ export default function AddEventModal({ isOpen, onClose, onSave, initialDate, ed
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-md shadow-2xl">
+    // On mobile: slide up from bottom. On desktop: centered.
+    <div
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex flex-col justify-end sm:justify-center sm:items-center z-50"
+      onClick={onClose}
+    >
+      <div
+        className="bg-gray-900 border-t sm:border border-gray-700 w-full sm:max-w-md sm:rounded-xl shadow-2xl max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Drag handle on mobile */}
+        <div className="flex justify-center pt-3 pb-1 sm:hidden">
+          <div className="w-10 h-1 bg-gray-700 rounded-full" />
+        </div>
+
         {/* Modal header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800">
           <h2 className="font-semibold text-white">{editEvent ? 'Edit Event' : 'New Event'}</h2>
-          <button
-            onClick={onClose}
-            className="p-1.5 hover:bg-gray-800 rounded-lg transition-colors text-gray-400 hover:text-white"
-          >
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-800 rounded-lg transition-colors text-gray-400 hover:text-white">
             <X size={18} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
           {/* Title */}
           <input
             type="text"
@@ -65,7 +74,7 @@ export default function AddEventModal({ isOpen, onClose, onSave, initialDate, ed
             onChange={set('title')}
             required
             autoFocus
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors text-sm"
+            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors text-sm"
           />
 
           {/* Date */}
@@ -76,7 +85,7 @@ export default function AddEventModal({ isOpen, onClose, onSave, initialDate, ed
               value={form.date}
               onChange={set('date')}
               required
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors text-sm"
+              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors text-sm"
             />
           </div>
 
@@ -88,14 +97,14 @@ export default function AddEventModal({ isOpen, onClose, onSave, initialDate, ed
                 type="time"
                 value={form.startTime}
                 onChange={set('startTime')}
-                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors text-sm"
+                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors text-sm"
               />
               <span className="text-gray-600 text-sm">–</span>
               <input
                 type="time"
                 value={form.endTime}
                 onChange={set('endTime')}
-                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors text-sm"
+                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors text-sm"
               />
             </div>
           </div>
@@ -108,7 +117,7 @@ export default function AddEventModal({ isOpen, onClose, onSave, initialDate, ed
               placeholder="Location"
               value={form.location}
               onChange={set('location')}
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors text-sm"
+              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors text-sm"
             />
           </div>
 
@@ -120,40 +129,39 @@ export default function AddEventModal({ isOpen, onClose, onSave, initialDate, ed
               value={form.description}
               onChange={set('description')}
               rows={2}
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors resize-none text-sm"
+              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors resize-none text-sm"
             />
           </div>
 
           {/* Color picker */}
           <div className="flex items-center gap-3">
             <div className={`w-3.5 h-3.5 rounded-full flex-shrink-0 ${COLORS.find(c => c.id === form.color)?.cls || 'bg-blue-500'}`} />
-            <div className="flex gap-2">
+            <div className="flex gap-3">
               {COLORS.map(({ id, cls }) => (
                 <button
                   key={id}
                   type="button"
                   onClick={() => setForm(f => ({ ...f, color: id }))}
-                  className={`w-6 h-6 rounded-full ${cls} transition-transform hover:scale-110 ${
+                  className={`w-7 h-7 rounded-full ${cls} transition-transform hover:scale-110 ${
                     form.color === id ? 'ring-2 ring-white ring-offset-2 ring-offset-gray-900 scale-110' : ''
                   }`}
-                  title={id}
                 />
               ))}
             </div>
           </div>
 
           {/* Buttons */}
-          <div className="flex gap-3 pt-1">
+          <div className="flex gap-3 pt-1 pb-2">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 py-2.5 rounded-lg text-sm font-medium transition-colors"
+              className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 py-3 rounded-lg text-sm font-medium transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-2.5 rounded-lg text-sm font-medium transition-colors"
+              className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-lg text-sm font-medium transition-colors"
             >
               {editEvent ? 'Save Changes' : 'Add Event'}
             </button>
